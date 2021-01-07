@@ -1,20 +1,44 @@
 package io.asnell.contactshistory
 
+import android.Manifest.permission.READ_CONTACTS
+import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.database.Cursor
 import android.os.Build
 import android.os.Bundle
+import android.provider.ContactsContract.Contacts
+import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
+import androidx.loader.app.LoaderManager
+import androidx.loader.content.CursorLoader
+import androidx.loader.content.Loader
 import androidx.navigation.findNavController
 import androidx.recyclerview.widget.RecyclerView
-import io.asnell.contactshistory.placeholder.PlaceholderContent;
+import io.asnell.contactshistory.placeholder.PlaceholderContent
 import io.asnell.contactshistory.databinding.FragmentItemListBinding
 import io.asnell.contactshistory.databinding.ItemListContentBinding
+import java.lang.IllegalStateException
+
+private val FROM_COLUMNS: Array<String> = arrayOf(Contacts.DISPLAY_NAME)
+
+private val TO_IDS: IntArray = intArrayOf(R.id.content)
+
+private val PROJECTION: Array<out String> = arrayOf(
+    Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME
+)
+
+// The column index for the _ID column
+private const val CONTACT_ID_INDEX: Int = 0
+// The column index for the CONTACT_KEY column
+private const val CONTACT_KEY_INDEX: Int = 1
 
 /**
  * A Fragment representing a list of Pings. This fragment
@@ -25,7 +49,7 @@ import io.asnell.contactshistory.databinding.ItemListContentBinding
  * item details side-by-side using two vertical panes.
  */
 
-class ItemListFragment : Fragment() {
+class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
 
     /**
      * Method to intercept global key events in the
@@ -58,10 +82,43 @@ class ItemListFragment : Fragment() {
     // onDestroyView.
     private val binding get() = _binding!!
 
+    private lateinit var mLoaderManager: LoaderManager
+
+    private val contacts: MutableList<ContactItem> = mutableListOf()
+
+    private var adapter: SimpleItemRecyclerViewAdapter? = null
+
+    fun setupLoader() {
+        mLoaderManager = LoaderManager.getInstance(this)
+        mLoaderManager.initLoader(0, null, this)
+    }
+
+    override fun onCreateLoader(id: Int, args: Bundle?): Loader<Cursor> {
+        return activity?.let {
+            return CursorLoader(it, Contacts.CONTENT_URI, PROJECTION, null, null, null)
+        } ?: throw IllegalStateException()
+    }
+
+    override fun onLoadFinished(loader: Loader<Cursor>, data: Cursor) {
+        val displayNameColumnId = data.getColumnIndex(Contacts.DISPLAY_NAME)
+        Log.d(TAG, "finished loading contacts. count: ${data.count}")
+        var id = 0
+        while (data.moveToNext()) {
+            ++id
+            contacts.add(ContactItem(id.toString(), data.getString(displayNameColumnId)))
+        }
+
+        adapter?.resetData(contacts)
+    }
+
+    override fun onLoaderReset(loader: Loader<Cursor>) {
+        Log.d(TAG, "loader reset")
+    }
+
     override fun onCreateView(
             inflater: LayoutInflater, container: ViewGroup?,
             savedInstanceState: Bundle?
-    ): View? {
+    ): View {
 
         _binding = FragmentItemListBinding.inflate(inflater, container, false)
         return binding.root
@@ -112,6 +169,19 @@ class ItemListFragment : Fragment() {
             true
         }
         setupRecyclerView(recyclerView, onClickListener, onContextClickListener)
+
+        val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                setupLoader()
+            } else {
+                Log.e(TAG, "read contacts permission denied")
+            }
+        }
+        if (ContextCompat.checkSelfPermission(requireContext(), READ_CONTACTS) == PERMISSION_GRANTED) {
+            setupLoader()
+        } else {
+            requestPermissionLauncher.launch(READ_CONTACTS)
+        }
     }
 
     private fun setupRecyclerView(
@@ -120,19 +190,25 @@ class ItemListFragment : Fragment() {
             onContextClickListener: View.OnContextClickListener
     ) {
 
-        recyclerView.adapter = SimpleItemRecyclerViewAdapter(
-                PlaceholderContent.ITEMS,
+        adapter = SimpleItemRecyclerViewAdapter(
+                contacts,
                 onClickListener,
                 onContextClickListener
         )
+        recyclerView.adapter = adapter
     }
 
     class SimpleItemRecyclerViewAdapter(
-            private val values: List<PlaceholderContent.PlaceholderItem>,
+            private var values: List<ContactItem>,
             private val onClickListener: View.OnClickListener,
             private val onContextClickListener: View.OnContextClickListener
     ) :
             RecyclerView.Adapter<SimpleItemRecyclerViewAdapter.ViewHolder>() {
+
+        fun resetData(newValues: List<ContactItem>) {
+            values = newValues
+            notifyDataSetChanged()
+        }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
 
@@ -144,7 +220,7 @@ class ItemListFragment : Fragment() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = values[position]
             holder.idView.text = item.id
-            holder.contentView.text = item.content
+            holder.contentView.text = item.displayName
 
             with(holder.itemView) {
                 tag = item
@@ -167,5 +243,9 @@ class ItemListFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        private const val TAG = "ItemListFragment"
     }
 }
