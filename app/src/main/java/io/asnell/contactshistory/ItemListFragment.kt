@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.database.Cursor
-import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract.Contacts
 import android.text.format.DateFormat.getDateFormat
@@ -25,7 +24,6 @@ import androidx.loader.app.LoaderManager
 import androidx.loader.content.CursorLoader
 import androidx.loader.content.Loader
 import androidx.recyclerview.widget.RecyclerView
-import io.asnell.contactshistory.placeholder.PlaceholderContent
 import io.asnell.contactshistory.databinding.FragmentItemListBinding
 import io.asnell.contactshistory.databinding.ItemListContentBinding
 import java.lang.IllegalStateException
@@ -33,7 +31,7 @@ import java.text.DateFormat
 import java.util.*
 
 private val PROJECTION: Array<out String> = arrayOf(
-        Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
+        Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME_PRIMARY, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
 )
 
 /**
@@ -99,15 +97,16 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
     }
 
     override fun onCreateLoader(id: Int, args: Bundle?): Loader<Cursor> {
+        val sortOrder = "${Contacts.CONTACT_LAST_UPDATED_TIMESTAMP} DESC"
         return activity?.let {
-            return CursorLoader(it, Contacts.CONTENT_URI, PROJECTION, null, null, null)
+            return CursorLoader(it, Contacts.CONTENT_URI, PROJECTION, null, null, sortOrder)
         } ?: throw IllegalStateException()
     }
 
     override fun onLoadFinished(loader: Loader<Cursor>, data: Cursor) {
         val idColumnId = data.getColumnIndex(Contacts._ID)
         val contactKeyId = data.getColumnIndex(Contacts.LOOKUP_KEY)
-        val displayNameColumnId = data.getColumnIndex(Contacts.DISPLAY_NAME)
+        val displayNameColumnId = data.getColumnIndex(Contacts.DISPLAY_NAME_PRIMARY)
         val timestampColumnId = data.getColumnIndex(Contacts.CONTACT_LAST_UPDATED_TIMESTAMP)
         Log.d(TAG, "finished loading contacts. count: ${data.count}")
         var id = 0
@@ -122,7 +121,8 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
             val formattedDate = dateFormat.format(date)
             val formattedTime = timeFormat.format(date)
             val datetime = "$formattedDate $formattedTime"
-            contacts.add(ContactItem(id.toString(), data.getString(displayNameColumnId), datetime, lookupUri))
+            val displayName = data.getString(displayNameColumnId) ?: "(unnamed)"
+            contacts.add(ContactItem(id.toString(), displayName, datetime, lookupUri))
         }
 
         adapter?.resetData(contacts)
