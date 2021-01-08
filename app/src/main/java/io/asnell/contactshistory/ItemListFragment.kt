@@ -33,7 +33,7 @@ import java.text.DateFormat
 import java.util.*
 
 private val PROJECTION: Array<out String> = arrayOf(
-    Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
+        Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
 )
 
 /**
@@ -158,21 +158,7 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
             startActivity(intent)
         }
 
-        /**
-         * Context click listener to handle Right click events
-         * from mice and trackpad input to provide a more native
-         * experience on larger screen devices
-         */
-        val onContextClickListener = View.OnContextClickListener { v ->
-            val item = v.tag as PlaceholderContent.PlaceholderItem
-            Toast.makeText(
-                    v.context,
-                    "Context click of item " + item.id,
-                    Toast.LENGTH_LONG
-            ).show()
-            true
-        }
-        setupRecyclerView(recyclerView, onClickListener, onContextClickListener)
+        setupRecyclerView(recyclerView, onClickListener)
 
         val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
@@ -191,22 +177,16 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
 
     private fun setupRecyclerView(
             recyclerView: RecyclerView,
-            onClickListener: View.OnClickListener,
-            onContextClickListener: View.OnContextClickListener
+            onClickListener: View.OnClickListener
     ) {
 
-        adapter = SimpleItemRecyclerViewAdapter(
-                contacts,
-                onClickListener,
-                onContextClickListener
-        )
+        adapter = SimpleItemRecyclerViewAdapter(contacts, onClickListener)
         recyclerView.adapter = adapter
     }
 
     class SimpleItemRecyclerViewAdapter(
             private var values: List<ContactItem>,
-            private val onClickListener: View.OnClickListener,
-            private val onContextClickListener: View.OnContextClickListener
+            private val onClickListener: View.OnClickListener
     ) :
             RecyclerView.Adapter<SimpleItemRecyclerViewAdapter.ViewHolder>() {
 
@@ -230,9 +210,6 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
             with(holder.itemView) {
                 tag = item
                 setOnClickListener(onClickListener)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    setOnContextClickListener(onContextClickListener)
-                }
             }
         }
 
