@@ -32,15 +32,9 @@ import java.lang.IllegalStateException
 import java.text.DateFormat
 import java.util.*
 
-private val PROJECTION: Array<out String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-    arrayOf(
-        Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
-    )
-} else {
-    arrayOf(
-            Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_STATUS_TIMESTAMP
-    )
-}
+private val PROJECTION: Array<out String> = arrayOf(
+    Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
+)
 
 /**
  * A Fragment representing a list of Pings. This fragment
@@ -114,11 +108,7 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
         val idColumnId = data.getColumnIndex(Contacts._ID)
         val contactKeyId = data.getColumnIndex(Contacts.LOOKUP_KEY)
         val displayNameColumnId = data.getColumnIndex(Contacts.DISPLAY_NAME)
-        val timestampColumnId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            data.getColumnIndex(Contacts.CONTACT_LAST_UPDATED_TIMESTAMP)
-        } else {
-            data.getColumnIndex(Contacts.CONTACT_STATUS_TIMESTAMP)
-        }
+        val timestampColumnId = data.getColumnIndex(Contacts.CONTACT_LAST_UPDATED_TIMESTAMP)
         Log.d(TAG, "finished loading contacts. count: ${data.count}")
         var id = 0
         while (data.moveToNext()) {
