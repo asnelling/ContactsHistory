@@ -1,11 +1,15 @@
 package io.asnell.contactshistory
 
 import android.Manifest.permission.READ_CONTACTS
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.database.Cursor
 import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract.Contacts
+import android.text.format.DateFormat.getDateFormat
+import android.text.format.DateFormat.getTimeFormat
 import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -20,25 +24,23 @@ import androidx.fragment.app.Fragment
 import androidx.loader.app.LoaderManager
 import androidx.loader.content.CursorLoader
 import androidx.loader.content.Loader
-import androidx.navigation.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import io.asnell.contactshistory.placeholder.PlaceholderContent
 import io.asnell.contactshistory.databinding.FragmentItemListBinding
 import io.asnell.contactshistory.databinding.ItemListContentBinding
 import java.lang.IllegalStateException
+import java.text.DateFormat
+import java.util.*
 
-private val FROM_COLUMNS: Array<String> = arrayOf(Contacts.DISPLAY_NAME)
-
-private val TO_IDS: IntArray = intArrayOf(R.id.content)
-
-private val PROJECTION: Array<out String> = arrayOf(
-    Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME
-)
-
-// The column index for the _ID column
-private const val CONTACT_ID_INDEX: Int = 0
-// The column index for the CONTACT_KEY column
-private const val CONTACT_KEY_INDEX: Int = 1
+private val PROJECTION: Array<out String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+    arrayOf(
+        Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
+    )
+} else {
+    arrayOf(
+            Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME, Contacts.CONTACT_STATUS_TIMESTAMP
+    )
+}
 
 /**
  * A Fragment representing a list of Pings. This fragment
@@ -88,7 +90,16 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
 
     private var adapter: SimpleItemRecyclerViewAdapter? = null
 
-    fun setupLoader() {
+    private lateinit var dateFormat: DateFormat
+    private lateinit var timeFormat: DateFormat
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        dateFormat = getDateFormat(context)
+        timeFormat = getTimeFormat(context)
+    }
+
+    private fun setupLoader() {
         mLoaderManager = LoaderManager.getInstance(this)
         mLoaderManager.initLoader(0, null, this)
     }
@@ -100,12 +111,28 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
     }
 
     override fun onLoadFinished(loader: Loader<Cursor>, data: Cursor) {
+        val idColumnId = data.getColumnIndex(Contacts._ID)
+        val contactKeyId = data.getColumnIndex(Contacts.LOOKUP_KEY)
         val displayNameColumnId = data.getColumnIndex(Contacts.DISPLAY_NAME)
+        val timestampColumnId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            data.getColumnIndex(Contacts.CONTACT_LAST_UPDATED_TIMESTAMP)
+        } else {
+            data.getColumnIndex(Contacts.CONTACT_STATUS_TIMESTAMP)
+        }
         Log.d(TAG, "finished loading contacts. count: ${data.count}")
         var id = 0
         while (data.moveToNext()) {
             ++id
-            contacts.add(ContactItem(id.toString(), data.getString(displayNameColumnId)))
+            val contactId = data.getLong(idColumnId)
+            val contactKey = data.getString(contactKeyId)
+            val lookupUri = Contacts.getLookupUri(contactId, contactKey)
+            val date = Date(data.getLong(timestampColumnId))
+            Log.d(TAG, "contact timestamp: $date")
+            Log.d(TAG, "contact lookup URI: $lookupUri")
+            val formattedDate = dateFormat.format(date)
+            val formattedTime = timeFormat.format(date)
+            val datetime = "$formattedDate $formattedTime"
+            contacts.add(ContactItem(id.toString(), data.getString(displayNameColumnId), datetime, lookupUri))
         }
 
         adapter?.resetData(contacts)
@@ -132,26 +159,13 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
 
         val recyclerView: RecyclerView = binding.itemList
 
-        // Leaving this not using view binding as it relies on if the view is visible the current
-        // layout configuration (layout, layout-sw600dp)
-        val itemDetailFragmentContainer: View? = view.findViewById(R.id.item_detail_nav_container)
-
         /** Click Listener to trigger navigation based on if you have
          * a single pane layout or two pane layout
          */
         val onClickListener = View.OnClickListener { itemView ->
-            val item = itemView.tag as PlaceholderContent.PlaceholderItem
-            val bundle = Bundle()
-            bundle.putString(
-                    ItemDetailFragment.ARG_ITEM_ID,
-                    item.id
-            )
-            if (itemDetailFragmentContainer != null) {
-                itemDetailFragmentContainer.findNavController()
-                        .navigate(R.id.fragment_item_detail, bundle)
-            } else {
-                itemView.findNavController().navigate(R.id.show_item_detail, bundle)
-            }
+            val item = itemView.tag as ContactItem
+            val intent = Intent(Intent.ACTION_VIEW, item.lookupUri)
+            startActivity(intent)
         }
 
         /**
@@ -177,6 +191,7 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
                 Log.e(TAG, "read contacts permission denied")
             }
         }
+
         if (ContextCompat.checkSelfPermission(requireContext(), READ_CONTACTS) == PERMISSION_GRANTED) {
             setupLoader()
         } else {
@@ -219,8 +234,8 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = values[position]
-            holder.idView.text = item.id
-            holder.contentView.text = item.displayName
+            holder.nameView.text = item.displayName
+            holder.datetimeView.text = item.changed
 
             with(holder.itemView) {
                 tag = item
@@ -234,8 +249,8 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
         override fun getItemCount() = values.size
 
         inner class ViewHolder(binding: ItemListContentBinding) : RecyclerView.ViewHolder(binding.root) {
-            val idView: TextView = binding.idText
-            val contentView: TextView = binding.content
+            val nameView: TextView = binding.name
+            val datetimeView: TextView = binding.datetime
         }
 
     }
