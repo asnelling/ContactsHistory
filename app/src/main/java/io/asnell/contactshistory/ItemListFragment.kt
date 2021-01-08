@@ -34,15 +34,6 @@ private val PROJECTION: Array<out String> = arrayOf(
         Contacts._ID, Contacts.LOOKUP_KEY, Contacts.DISPLAY_NAME_PRIMARY, Contacts.CONTACT_LAST_UPDATED_TIMESTAMP
 )
 
-/**
- * A Fragment representing a list of Pings. This fragment
- * has different presentations for handset and larger screen devices. On
- * handsets, the fragment presents a list of items, which when touched,
- * lead to a {@link ItemDetailFragment} representing
- * item details. On larger screens, the Navigation controller presents the list of items and
- * item details side-by-side using two vertical panes.
- */
-
 class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
 
     private var _binding: FragmentItemListBinding? = null
@@ -122,9 +113,7 @@ class ItemListFragment : Fragment(), LoaderManager.LoaderCallbacks<Cursor> {
 
         val recyclerView: RecyclerView = binding.itemList
 
-        /** Click Listener to trigger navigation based on if you have
-         * a single pane layout or two pane layout
-         */
+        // Click Listener to view contact details in an external contacts app
         val onClickListener = View.OnClickListener { itemView ->
             val item = itemView.tag as ContactItem
             val intent = Intent(Intent.ACTION_VIEW, item.lookupUri)
