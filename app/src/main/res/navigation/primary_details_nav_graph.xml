@@ -7,5 +7,5 @@
     <fragment
         android:id="@+id/item_list_fragment"
         android:name="io.asnell.contactshistory.ItemListFragment"
-        android:label="ItemListFragment" />
+        android:label="@string/app_name" />
 </navigation>
